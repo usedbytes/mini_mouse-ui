@@ -83,6 +83,16 @@ func main() {
 		cairoSurface.SetSourceRGB(0.0, 0.0, 0.0)
 		cairoSurface.Fill()
 
+		grad := cairo.NewPatternLinear(cairo.Linear{0, 0, float64(windowW) / 2, float64(windowH) / 2})
+		grad.SetExtend(cairo.EXTEND_REFLECT)
+		grad.AddColorStopRGB(0, 0, 1.0, 0)
+		grad.AddColorStopRGB(1.0, 0, 0, 1.0)
+		cairoSurface.SetSource(grad)
+		grad.Destroy()
+
+		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+		cairoSurface.Fill()
+
 		// Draw to a sub-window (500x500)
 		cairoSurface.PushGroup()
 		wwidth := float64(500)
