@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"math"
+	"net/rpc"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/ungerik/go-cairo"
-	"github.com/usedbytes/mini_mouse/ui/pose"
-	"github.com/usedbytes/bot_matrix/datalink"
-	"github.com/usedbytes/bot_matrix/datalink/rpcconn"
 	"time"
 )
 
@@ -18,8 +16,9 @@ func main() {
 	}
 	defer sdl.Quit()
 
-	devname := "tcp:localhost:5556"
-	c, err := rpcconn.NewRPCClient(devname[len("tcp:"):])
+	//devname := "tcp:minimouse.local:1234"
+	devname := "tcp:localhost:1234"
+	c, err := rpc.DialHTTP("tcp", devname[len("tcp:"):])
 	if err != nil {
 		fmt.Println("Couldn't connect to server");
 	}
@@ -65,16 +64,13 @@ func main() {
 		}
 
 		if c != nil {
-			pkts, err := c.Transact([]datalink.Packet{})
+			var vec []float64
+			err = c.Call("Telem.GetEuler", true, &vec)
 			if err != nil {
-				fmt.Println("Error reading datalink")
-			}
+				fmt.Println("Error reading vector:", err)
 
-			for _, p := range pkts {
-				if p.Endpoint == pose.Endpoint {
-					report := ((&pose.Pose{}).Receive(&p)).(*pose.PoseReport)
-					rot = report.Heading * math.Pi / 180.0
-				}
+			} else {
+				rot = vec[0] * math.Pi / 180.0
 			}
 		}
 
@@ -99,30 +95,25 @@ func main() {
 		wheight := float64(500)
 		width := float64(outline.GetWidth())
 		height := float64(outline.GetHeight())
-
 		// sub-window background/outline
 		cairoSurface.Rectangle(0, 0, wwidth, wheight)
 		cairoSurface.SetSourceRGB(0.3, 0.3, 0.3)
 		cairoSurface.FillPreserve()
 		cairoSurface.SetSourceRGB(1.0, 0.0, 0.0)
 		cairoSurface.Stroke()
-
 		// Draw texture in middle of sub-window, rotated
 		cairoSurface.Translate(float64(wwidth / 2), float64(wheight / 2))
 		cairoSurface.Rotate(rot)
 		cairoSurface.SetSourceSurface(outline, -width / 2, -height / 2)
 		cairoSurface.Rectangle(-width / 2, -height / 2, width, height)
 		cairoSurface.Fill()
-
 		// Grab the sub-window pattern
 		pattern := cairoSurface.PopGroup()
-
 		// Position the sub-window
 		translate := cairo.Matrix{}
 		translate.InitTranslate(50, 50)
 		translate.Invert()
 		pattern.SetMatrix(translate)
-
 		cairoSurface.SetSource(pattern)
 		pattern.Destroy()
 		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
