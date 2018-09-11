@@ -7,7 +7,70 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/ungerik/go-cairo"
 	"time"
+
+	"image"
+
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg/draw"
+	"gonum.org/v1/plot/vg/vgimg"
 )
+
+var roverSprite *cairo.Surface
+func drawRover(cairoSurface *cairo.Surface, heading float64) *cairo.Pattern {
+	if roverSprite == nil {
+		var status cairo.Status
+		roverSprite, status = cairo.NewSurfaceFromPNG("outline.png")
+		if status != cairo.STATUS_SUCCESS {
+			panic("erk")
+		}
+	}
+
+	// Draw to a sub-window (500x500)
+	cairoSurface.PushGroup()
+	wwidth := float64(500)
+	wheight := float64(500)
+	width := float64(roverSprite.GetWidth())
+	height := float64(roverSprite.GetHeight())
+
+	// sub-window background/outline
+	cairoSurface.Rectangle(0, 0, wwidth, wheight)
+	cairoSurface.SetSourceRGB(0.3, 0.3, 0.3)
+	cairoSurface.FillPreserve()
+	cairoSurface.SetSourceRGB(1.0, 0.0, 0.0)
+	cairoSurface.Stroke()
+
+	// Draw texture in middle of sub-window, rotated
+	cairoSurface.Translate(float64(wwidth / 2), float64(wheight / 2))
+	cairoSurface.Rotate(heading)
+	cairoSurface.SetSourceSurface(roverSprite, -width / 2, -height / 2)
+	cairoSurface.Rectangle(-width / 2, -height / 2, width, height)
+	cairoSurface.Fill()
+
+	// Grab the sub-window pattern
+	return cairoSurface.PopGroup()
+}
+
+func drawPlot(surf *cairo.Surface) *cairo.Pattern {
+	p, err := plot.New()
+	if err != nil {
+		panic(err)
+	}
+	l, err := plotter.NewLine(plotter.XYs{{0, 0}, {1, 1}, {2, 2}})
+	if err != nil {
+		panic(err)
+	}
+	p.Add(l)
+
+	// Draw the plot to an in-memory image.
+	dest := image.NewRGBA(image.Rect(0, 0, 500, 500))
+	c := vgimg.NewWith(vgimg.UseImage(dest))
+	p.Draw(draw.New(c))
+
+	outSurf := cairo.NewSurfaceFromImage(dest)
+	defer outSurf.Destroy()
+	return cairo.NewPatternForSurface(outSurf)
+}
 
 func main() {
 	fmt.Println("Mini Mouse UI")
@@ -23,7 +86,7 @@ func main() {
 		fmt.Println("Couldn't connect to server");
 	}
 
-	windowW := 800
+	windowW := 1150
 	windowH := 600
 
 	window, err := sdl.CreateWindow("Mini Mouse", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
@@ -43,11 +106,6 @@ func main() {
 	cairoSurface.SetFontSize(32.0)
 
 	tick := time.NewTicker(16 * time.Millisecond)
-
-	outline, status := cairo.NewSurfaceFromPNG("outline.png")
-	if status != cairo.STATUS_SUCCESS {
-		panic("erk")
-	}
 
 	rot := float64(0)
 
@@ -89,29 +147,20 @@ func main() {
 		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 		cairoSurface.Fill()
 
-		// Draw to a sub-window (500x500)
-		cairoSurface.PushGroup()
-		wwidth := float64(500)
-		wheight := float64(500)
-		width := float64(outline.GetWidth())
-		height := float64(outline.GetHeight())
-		// sub-window background/outline
-		cairoSurface.Rectangle(0, 0, wwidth, wheight)
-		cairoSurface.SetSourceRGB(0.3, 0.3, 0.3)
-		cairoSurface.FillPreserve()
-		cairoSurface.SetSourceRGB(1.0, 0.0, 0.0)
-		cairoSurface.Stroke()
-		// Draw texture in middle of sub-window, rotated
-		cairoSurface.Translate(float64(wwidth / 2), float64(wheight / 2))
-		cairoSurface.Rotate(rot)
-		cairoSurface.SetSourceSurface(outline, -width / 2, -height / 2)
-		cairoSurface.Rectangle(-width / 2, -height / 2, width, height)
-		cairoSurface.Fill()
-		// Grab the sub-window pattern
-		pattern := cairoSurface.PopGroup()
+		pattern := drawRover(cairoSurface, rot)
 		// Position the sub-window
 		translate := cairo.Matrix{}
 		translate.InitTranslate(50, 50)
+		translate.Invert()
+		pattern.SetMatrix(translate)
+		cairoSurface.SetSource(pattern)
+		pattern.Destroy()
+		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+		cairoSurface.Fill()
+
+		pattern = drawPlot(cairoSurface)
+		translate = cairo.Matrix{}
+		translate.InitTranslate(600, 50)
 		translate.Invert()
 		pattern.SetMatrix(translate)
 		cairoSurface.SetSource(pattern)
