@@ -16,6 +16,8 @@ import (
 	"gonum.org/v1/plot/vg/vgimg"
 )
 
+var bench bool
+
 var roverSprite *cairo.Surface
 func drawRover(cairoSurface *cairo.Surface, heading float64) *cairo.Pattern {
 	if roverSprite == nil {
@@ -132,6 +134,8 @@ func main() {
 			}
 		}
 
+		now := time.Now()
+
 		// Clear the whole window (black)
 		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 		cairoSurface.SetSourceRGB(0.0, 0.0, 0.0)
@@ -171,5 +175,10 @@ func main() {
 		// Finally draw to the screen
 		cairoSurface.Flush()
 		window.UpdateSurface()
+
+		if bench {
+			fmt.Println(time.Since(now))
+			now = time.Now()
+		}
 	}
 }
