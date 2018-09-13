@@ -108,8 +108,16 @@ func main() {
 	}
 
 	cairoSurface := cairo.NewSurfaceFromData(sdlSurface.Data(), cairo.FORMAT_ARGB32, int(sdlSurface.W), int(sdlSurface.H), int(sdlSurface.Pitch));
-	cairoSurface.SelectFontFace("serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-	cairoSurface.SetFontSize(32.0)
+
+	grad := cairo.NewPatternLinear(cairo.Linear{0, 0, float64(windowW) / 2, float64(windowH) / 2})
+	grad.SetExtend(cairo.EXTEND_REFLECT)
+	grad.AddColorStopRGB(0, 0, 1.0, 0)
+	grad.AddColorStopRGB(1.0, 0, 0, 1.0)
+	cairoSurface.SetSource(grad)
+	grad.Destroy()
+
+	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+	cairoSurface.Fill()
 
 	tick := time.NewTicker(16 * time.Millisecond)
 
@@ -139,21 +147,6 @@ func main() {
 		}
 
 		now := time.Now()
-
-		// Clear the whole window (black)
-		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-		cairoSurface.SetSourceRGB(0.0, 0.0, 0.0)
-		cairoSurface.Fill()
-
-		grad := cairo.NewPatternLinear(cairo.Linear{0, 0, float64(windowW) / 2, float64(windowH) / 2})
-		grad.SetExtend(cairo.EXTEND_REFLECT)
-		grad.AddColorStopRGB(0, 0, 1.0, 0)
-		grad.AddColorStopRGB(1.0, 0, 0, 1.0)
-		cairoSurface.SetSource(grad)
-		grad.Destroy()
-
-		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-		cairoSurface.Fill()
 
 		pattern := drawRover(cairoSurface, rot)
 		// Position the sub-window
