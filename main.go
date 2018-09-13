@@ -8,12 +8,13 @@ import (
 	"github.com/ungerik/go-cairo"
 	"time"
 
-	"image"
+	"github.com/usedbytes/mini_mouse/ui/vgcairo"
+	"image/color"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
-	"gonum.org/v1/plot/vg/vgimg"
 )
 
 var bench bool
@@ -58,20 +59,23 @@ func drawPlot(surf *cairo.Surface) *cairo.Pattern {
 	if err != nil {
 		panic(err)
 	}
-	l, err := plotter.NewLine(plotter.XYs{{0, 0}, {1, 1}, {2, 2}})
+	l, err := plotter.NewLine(plotter.XYs{{0, 0}, {1, 2}, {2, 2}})
 	if err != nil {
 		panic(err)
+	}
+
+	l.LineStyle = draw.LineStyle{
+		Color: color.RGBA{ 0xff, 0, 0, 0xff },
+		Width: 4,
+		Dashes: []vg.Length{5, 5},
 	}
 	p.Add(l)
 
 	// Draw the plot to an in-memory image.
-	dest := image.NewRGBA(image.Rect(0, 0, 500, 500))
-	c := vgimg.NewWith(vgimg.UseImage(dest))
+	c := vgcairo.New(500, 500)
 	p.Draw(draw.New(c))
 
-	outSurf := cairo.NewSurfaceFromImage(dest)
-	defer outSurf.Destroy()
-	return cairo.NewPatternForSurface(outSurf)
+	return cairo.NewPatternForSurface(c.Surface())
 }
 
 func main() {
