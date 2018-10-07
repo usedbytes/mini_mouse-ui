@@ -8,16 +8,26 @@ import (
 	"github.com/ungerik/go-cairo"
 	"time"
 
+	"gocv.io/x/gocv"
+
 	"github.com/usedbytes/mini_mouse/ui/vgcairo"
+	"image"
 	"image/color"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
+
+	"net"
+
+	"github.com/usedbytes/bot_matrix/datalink"
+	"github.com/usedbytes/bot_matrix/datalink/netconn"
+
+	"github.com/usedbytes/mini_mouse/ui/imgpkt"
 )
 
-var bench bool
+var bench bool = true
 
 var roverSprite *cairo.Surface
 func drawRover(cairoSurface *cairo.Surface, heading float64) *cairo.Pattern {
@@ -78,6 +88,151 @@ func drawPlot(surf *cairo.Surface) *cairo.Pattern {
 	return cairo.NewPatternForSurface(c.Surface())
 }
 
+func expandContrastRowWise(m *gocv.Mat) {
+	shape := m.Size()
+
+	for y := 0; y < shape[1]; y++ {
+		line := m.Region(image.Rect(0, y, shape[0], y + 1))
+
+		min, max, _, _ := gocv.MinMaxIdx(line)
+		factor := 255.0 / float32(max - min)
+		if min == max {
+			factor = 0.0
+		}
+
+		line.SubtractUChar(uint8(min))
+		line.MultiplyFloat(factor)
+		line.Close()
+	}
+}
+
+func findMiddles(m *gocv.Mat) [][]float32 {
+	shape := m.Size()
+	middles := make([][]float32, shape[1])
+
+	for y := 0; y < shape[0]; y++ {
+		middles[y] = make([]float32, 0, 2)
+		line := m.Region(image.Rect(0, y, shape[1], y + 1))
+		dat := line.DataPtrUint8()
+
+		in := false
+		start := 0
+		for x, v := range dat {
+			if v == 0 {
+				if in {
+					if (x - start >= 2) {
+						middles[y] = append(middles[y], float32(start + x) / 2)
+					}
+					in = false
+				}
+			} else {
+				if !in {
+					start = x
+					in = true
+				}
+			}
+		}
+		if in {
+			if (shape[1] - start >= 2) {
+				middles[y] = append(middles[y], float32(start + shape[1]) / 2)
+			}
+		}
+		line.Close()
+	}
+	return middles
+}
+
+var cvWin *gocv.Window
+func doCv(ip *imgpkt.ImagePacket) [][]image.Point {
+	src, err := gocv.NewMatFromBytes(int(ip.Height), int(ip.Width), gocv.MatTypeCV8UC4, ip.Data)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	size := src.Size()
+
+	img := src.Region(image.Rect(0, size[0] / 2, size[1], size[0]))
+	size = img.Size()
+
+	gray := gocv.NewMat()
+	gocv.CvtColor(img, &gray, gocv.ColorBGRAToGray)
+
+	minSize := image.Point{16, 16}
+	hScale := float32(size[1]) / float32(minSize.X)
+	vScale := float32(size[0]) / float32(minSize.Y)
+
+	small := gocv.NewMat()
+	gocv.Resize(gray, &small, minSize, 0, 0, gocv.InterpolationLinear)
+	gray.Close()
+	expandContrastRowWise(&small)
+
+	binary := gocv.NewMat()
+	gocv.Threshold(small, &binary, 127.0, 255.0, gocv.ThresholdBinary)
+	small.Close()
+
+	middles := findMiddles(&binary)
+	binary.Close()
+
+	scaledMiddles := make([][]image.Point, len(middles))
+	for i, row := range middles {
+		scaledMiddles[i] = make([]image.Point, len(row))
+		for j, m := range row {
+			scaledMiddles[i][j] = image.Pt(int(float32(m) * hScale), int((float32(i) + 0.5) * vScale) + (size[0]))
+		}
+	}
+
+	img.Close()
+	src.Close()
+
+	return scaledMiddles
+}
+
+func abs(i int) int {
+	if i < 0 {
+		return -i
+	}
+	return i
+}
+
+func findClosest(points []image.Point, pt image.Point) int {
+	min := 99999
+	mindx := 0
+	for i, p := range points {
+		dst := pt.X - p.X
+		if dst < min {
+			min = dst
+			mindx = i
+		}
+	}
+	return mindx
+}
+
+func findLine(w int, scaledMiddles [][]image.Point) []image.Point {
+	dx := 0
+	linePoints := make([]image.Point, len(scaledMiddles))
+
+	var current int
+	for _, row := range scaledMiddles {
+		if len(row) == 0 {
+			continue
+		}
+		current = row[0].X
+	}
+
+	for i, row := range scaledMiddles {
+		if len(row) == 0 {
+			continue
+		}
+		pred := current + dx
+		idx := findClosest(row, image.Pt(pred, 0))
+		dx = row[idx].X - current
+		linePoints[i] = row[idx]
+	}
+
+	return linePoints
+}
+
 func main() {
 	fmt.Println("Mini Mouse UI")
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
@@ -85,12 +240,20 @@ func main() {
 	}
 	defer sdl.Quit()
 
+	cvWin = gocv.NewWindow("Hello")
+
 	//devname := "tcp:minimouse.local:1234"
 	devname := "tcp:localhost:1234"
 	c, err := rpc.DialHTTP("tcp", devname[len("tcp:"):])
 	if err != nil {
 		fmt.Println("Couldn't connect to server");
 	}
+
+	nc, err := net.Dial("tcp", "minimouse.local:9876")
+	if err != nil {
+		fmt.Println("Couldn't connect to image server");
+	}
+	t := netconn.NewNetconn(nc)
 
 	windowW := 1150
 	windowH := 600
@@ -135,6 +298,59 @@ func main() {
 			}
 		}
 
+		rxp, err := t.Transact([]datalink.Packet{})
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		for _, p := range rxp {
+			ip, err := imgpkt.UnMarshal(&p)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Printf("Received image %d x %d\n", ip.Width, ip.Height)
+				rsurf := cairo.NewSurface(cairo.FORMAT_ARGB32, int(ip.Width), int(ip.Height))
+				rsurf.SetData(ip.Data)
+
+				middles := doCv(&ip)
+
+				rsurf.SetSourceRGB(1.0, 0.0, 0.0)
+				for _, row := range middles {
+					for _, m := range row {
+						rsurf.Rectangle(float64(m.X - 2), float64(m.Y - 2), 4, 4)
+						rsurf.Fill()
+					}
+				}
+
+				for i, j := 0, len(middles)-1; i < j; i, j = i+1, j-1 {
+					middles[i], middles[j] = middles[j], middles[i]
+				}
+				line := findLine(int(ip.Width), middles)
+
+				rsurf.SetSourceRGB(0.0, 1.0, 0.0)
+				for _, pt := range line {
+					rsurf.Rectangle(float64(pt.X - 1), float64(pt.Y - 1), 2, 2)
+					rsurf.Fill()
+				}
+				rsurf.Flush()
+
+				pattern := cairo.NewPatternForSurface(rsurf)
+				translate := cairo.Matrix{}
+				scalef := float64(500) / float64(ip.Width)
+				translate.InitTranslate(600, 50)
+				translate.Scale(scalef, scalef)
+				translate.Invert()
+
+				pattern.SetMatrix(translate)
+				cairoSurface.SetSource(pattern)
+				cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+				cairoSurface.Fill()
+
+				pattern.Destroy()
+				rsurf.Destroy()
+			}
+		}
+
 		if c != nil {
 			var vec []float64
 			err = c.Call("Telem.GetEuler", true, &vec)
@@ -159,6 +375,7 @@ func main() {
 		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 		cairoSurface.Fill()
 
+		/*
 		pattern = drawPlot(cairoSurface)
 		translate = cairo.Matrix{}
 		translate.InitTranslate(600, 50)
@@ -168,6 +385,7 @@ func main() {
 		pattern.Destroy()
 		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 		cairoSurface.Fill()
+		*/
 
 		// Finally draw to the screen
 		cairoSurface.Flush()
