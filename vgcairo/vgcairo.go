@@ -25,6 +25,11 @@ func New(w, h vg.Length) *Canvas {
 	return c
 }
 
+func (c *Canvas) Destroy() {
+	c.gc.Destroy()
+	c.gc = nil
+}
+
 func (c *Canvas) Surface() *cairo.Surface {
 	return c.gc
 }
