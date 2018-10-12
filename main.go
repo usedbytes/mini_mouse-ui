@@ -199,7 +199,7 @@ func findClosest(points []image.Point, pt image.Point) int {
 	min := 99999
 	mindx := 0
 	for i, p := range points {
-		dst := pt.X - p.X
+		dst := abs(pt.X - p.X)
 		if dst < min {
 			min = dst
 			mindx = i
