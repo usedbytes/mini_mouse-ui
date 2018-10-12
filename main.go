@@ -233,6 +233,11 @@ func findLine(w int, scaledMiddles [][]image.Point) []image.Point {
 	return linePoints
 }
 
+type Pose struct {
+	X, Y float64
+	Heading float64
+}
+
 func main() {
 	fmt.Println("Mini Mouse UI")
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
@@ -357,13 +362,22 @@ func main() {
 		}
 
 		if c != nil {
+			/*
 			var vec []float64
 			err = c.Call("Telem.GetEuler", true, &vec)
 			if err != nil {
 				fmt.Println("Error reading vector:", err)
-
 			} else {
+				fmt.Println("Vec:", vec)
 				rot = vec[0] * math.Pi / 180.0
+			}
+			*/
+			var pose Pose
+			err = c.Call("Telem.GetPose", true, &pose)
+			if err != nil {
+				fmt.Println("Error reading vector:", err)
+			} else {
+				rot = pose.Heading * math.Pi / 180.0
 			}
 		}
 
