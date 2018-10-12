@@ -249,11 +249,14 @@ func main() {
 		fmt.Println("Couldn't connect to server");
 	}
 
-	nc, err := net.Dial("tcp", "minimouse.local:9876")
+	var t datalink.Transactor
+	//nc, err := net.Dial("tcp", "minimouse.local:9876")
+	nc, err := net.Dial("tcp", "localhost:9876")
 	if err != nil {
 		fmt.Println("Couldn't connect to image server");
+	} else {
+		t = netconn.NewNetconn(nc)
 	}
-	t := netconn.NewNetconn(nc)
 
 	windowW := 1150
 	windowH := 600
@@ -298,56 +301,58 @@ func main() {
 			}
 		}
 
-		rxp, err := t.Transact([]datalink.Packet{})
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		for _, p := range rxp {
-			ip, err := imgpkt.UnMarshal(&p)
+		if t != nil {
+			rxp, err := t.Transact([]datalink.Packet{})
 			if err != nil {
 				fmt.Println(err)
-			} else {
-				fmt.Printf("Received image %d x %d\n", ip.Width, ip.Height)
-				rsurf := cairo.NewSurface(cairo.FORMAT_ARGB32, int(ip.Width), int(ip.Height))
-				rsurf.SetData(ip.Data)
+			}
 
-				middles := doCv(&ip)
+			for _, p := range rxp {
+				ip, err := imgpkt.UnMarshal(&p)
+				if err != nil {
+					fmt.Println(err)
+				} else {
+					fmt.Printf("Received image %d x %d\n", ip.Width, ip.Height)
+					rsurf := cairo.NewSurface(cairo.FORMAT_ARGB32, int(ip.Width), int(ip.Height))
+					rsurf.SetData(ip.Data)
 
-				rsurf.SetSourceRGB(1.0, 0.0, 0.0)
-				for _, row := range middles {
-					for _, m := range row {
-						rsurf.Rectangle(float64(m.X - 2), float64(m.Y - 2), 4, 4)
+					middles := doCv(&ip)
+
+					rsurf.SetSourceRGB(1.0, 0.0, 0.0)
+					for _, row := range middles {
+						for _, m := range row {
+							rsurf.Rectangle(float64(m.X - 2), float64(m.Y - 2), 4, 4)
+							rsurf.Fill()
+						}
+					}
+
+					for i, j := 0, len(middles)-1; i < j; i, j = i+1, j-1 {
+						middles[i], middles[j] = middles[j], middles[i]
+					}
+					line := findLine(int(ip.Width), middles)
+
+					rsurf.SetSourceRGB(0.0, 1.0, 0.0)
+					for _, pt := range line {
+						rsurf.Rectangle(float64(pt.X - 1), float64(pt.Y - 1), 2, 2)
 						rsurf.Fill()
 					}
+					rsurf.Flush()
+
+					pattern := cairo.NewPatternForSurface(rsurf)
+					translate := cairo.Matrix{}
+					scalef := float64(500) / float64(ip.Width)
+					translate.InitTranslate(600, 50)
+					translate.Scale(scalef, scalef)
+					translate.Invert()
+
+					pattern.SetMatrix(translate)
+					cairoSurface.SetSource(pattern)
+					cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+					cairoSurface.Fill()
+
+					pattern.Destroy()
+					rsurf.Destroy()
 				}
-
-				for i, j := 0, len(middles)-1; i < j; i, j = i+1, j-1 {
-					middles[i], middles[j] = middles[j], middles[i]
-				}
-				line := findLine(int(ip.Width), middles)
-
-				rsurf.SetSourceRGB(0.0, 1.0, 0.0)
-				for _, pt := range line {
-					rsurf.Rectangle(float64(pt.X - 1), float64(pt.Y - 1), 2, 2)
-					rsurf.Fill()
-				}
-				rsurf.Flush()
-
-				pattern := cairo.NewPatternForSurface(rsurf)
-				translate := cairo.Matrix{}
-				scalef := float64(500) / float64(ip.Width)
-				translate.InitTranslate(600, 50)
-				translate.Scale(scalef, scalef)
-				translate.Invert()
-
-				pattern.SetMatrix(translate)
-				cairoSurface.SetSource(pattern)
-				cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-				cairoSurface.Fill()
-
-				pattern.Destroy()
-				rsurf.Destroy()
 			}
 		}
 
