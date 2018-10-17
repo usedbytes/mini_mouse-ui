@@ -2,81 +2,15 @@ package main
 
 import (
 	"fmt"
-	"math"
-	"net/rpc"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/ungerik/go-cairo"
 	"time"
 
-	"github.com/usedbytes/mini_mouse/ui/vgcairo"
-	"image/color"
+	"image"
 
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/vg"
-	"gonum.org/v1/plot/vg/draw"
 )
 
 var bench bool
-
-var roverSprite *cairo.Surface
-func drawRover(cairoSurface *cairo.Surface, heading float64) *cairo.Pattern {
-	if roverSprite == nil {
-		var status cairo.Status
-		roverSprite, status = cairo.NewSurfaceFromPNG("outline.png")
-		if status != cairo.STATUS_SUCCESS {
-			panic("erk")
-		}
-	}
-
-	// Draw to a sub-window (500x500)
-	cairoSurface.PushGroup()
-	wwidth := float64(500)
-	wheight := float64(500)
-	width := float64(roverSprite.GetWidth())
-	height := float64(roverSprite.GetHeight())
-
-	// sub-window background/outline
-	cairoSurface.Rectangle(0, 0, wwidth, wheight)
-	cairoSurface.SetSourceRGB(0.3, 0.3, 0.3)
-	cairoSurface.FillPreserve()
-	cairoSurface.SetSourceRGB(1.0, 0.0, 0.0)
-	cairoSurface.Stroke()
-
-	// Draw texture in middle of sub-window, rotated
-	cairoSurface.Translate(float64(wwidth / 2), float64(wheight / 2))
-	cairoSurface.Rotate(heading)
-	cairoSurface.SetSourceSurface(roverSprite, -width / 2, -height / 2)
-	cairoSurface.Rectangle(-width / 2, -height / 2, width, height)
-	cairoSurface.Fill()
-
-	// Grab the sub-window pattern
-	return cairoSurface.PopGroup()
-}
-
-func drawPlot(surf *cairo.Surface) *cairo.Pattern {
-	p, err := plot.New()
-	if err != nil {
-		panic(err)
-	}
-	l, err := plotter.NewLine(plotter.XYs{{0, 0}, {1, 2}, {2, 2}})
-	if err != nil {
-		panic(err)
-	}
-
-	l.LineStyle = draw.LineStyle{
-		Color: color.RGBA{ 0xff, 0, 0, 0xff },
-		Width: 4,
-		Dashes: []vg.Length{5, 5},
-	}
-	p.Add(l)
-
-	// Draw the plot to an in-memory image.
-	c := vgcairo.New(500, 500)
-	p.Draw(draw.New(c))
-
-	return cairo.NewPatternForSurface(c.Surface())
-}
 
 func main() {
 	fmt.Println("Mini Mouse UI")
@@ -84,13 +18,6 @@ func main() {
 		panic(err)
 	}
 	defer sdl.Quit()
-
-	//devname := "tcp:minimouse.local:1234"
-	devname := "tcp:localhost:1234"
-	c, err := rpc.DialHTTP("tcp", devname[len("tcp:"):])
-	if err != nil {
-		fmt.Println("Couldn't connect to server");
-	}
 
 	windowW := 1150
 	windowH := 600
@@ -116,12 +43,20 @@ func main() {
 	cairoSurface.SetSource(grad)
 	grad.Destroy()
 
+	rover, err := NewRover()
+	if err != nil {
+		panic(err)
+	}
+
+	plot, err := NewPlot()
+	if err != nil {
+		panic(err)
+	}
+
 	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 	cairoSurface.Fill()
 
 	tick := time.NewTicker(16 * time.Millisecond)
-
-	rot := float64(0)
 
 	running := true
 	for running {
@@ -135,39 +70,15 @@ func main() {
 			}
 		}
 
-		if c != nil {
-			var vec []float64
-			err = c.Call("Telem.GetEuler", true, &vec)
-			if err != nil {
-				fmt.Println("Error reading vector:", err)
-
-			} else {
-				rot = vec[0] * math.Pi / 180.0
-			}
-		}
-
 		now := time.Now()
 
-		pattern := drawRover(cairoSurface, rot)
-		// Position the sub-window
-		translate := cairo.Matrix{}
-		translate.InitTranslate(50, 50)
-		translate.Invert()
-		pattern.SetMatrix(translate)
-		cairoSurface.SetSource(pattern)
-		pattern.Destroy()
-		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-		cairoSurface.Fill()
+		cairoSurface.Save()
+		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
+		cairoSurface.Restore()
 
-		pattern = drawPlot(cairoSurface)
-		translate = cairo.Matrix{}
-		translate.InitTranslate(600, 50)
-		translate.Invert()
-		pattern.SetMatrix(translate)
-		cairoSurface.SetSource(pattern)
-		pattern.Destroy()
-		cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-		cairoSurface.Fill()
+		cairoSurface.Save()
+		plot.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
+		cairoSurface.Restore()
 
 		// Finally draw to the screen
 		cairoSurface.Flush()
