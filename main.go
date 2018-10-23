@@ -1,19 +1,169 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
-	"github.com/veandco/go-sdl2/sdl"
-	"github.com/ungerik/go-cairo"
+	"image"
+	"log"
 	"time"
 
-	"image"
+	"github.com/ungerik/go-cairo"
+	"github.com/ungerik/go-cairo/extimage"
+	"github.com/usedbytes/hlegl"
+	"github.com/usedbytes/hsv"
+	"github.com/veandco/go-sdl2/sdl"
 
+	"golang.org/x/mobile/gl"
+	"golang.org/x/mobile/exp/f32"
+	"golang.org/x/mobile/exp/gl/glutil"
 )
 
 var bench bool = true
 
+type Framebuffer struct {
+	gl.Framebuffer
+	Tex gl.Texture
+	Width, Height int
+	Format gl.Enum
+}
+
+func NewFramebuffer(glctx gl.Context, width, height int, format gl.Enum) *Framebuffer {
+	fbo := Framebuffer{
+		Width: width,
+		Height: height,
+		Format: format,
+	}
+
+	fbo.Framebuffer = glctx.CreateFramebuffer()
+	fbo.Tex = glctx.CreateTexture()
+
+	glctx.BindFramebuffer(gl.FRAMEBUFFER, fbo.Framebuffer)
+	glctx.BindTexture(gl.TEXTURE_2D, fbo.Tex)
+	glctx.TexImage2D(gl.TEXTURE_2D, 0, int(format), width, height, format, gl.UNSIGNED_BYTE, nil)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	glctx.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fbo.Tex, 0)
+
+	result := glctx.CheckFramebufferStatus(gl.FRAMEBUFFER)
+	if result != gl.FRAMEBUFFER_COMPLETE {
+		log.Println("Error: Framebuffer not complete.")
+		return nil
+	}
+
+	return &fbo
+}
+
+func (f *Framebuffer) GetImage(glctx gl.Context) image.Image {
+	dst := make([]uint8, int(f.Width * f.Height * 4))
+	glctx.ReadPixels(dst, 0, 0, f.Width, f.Height, gl.RGBA, gl.UNSIGNED_BYTE)
+
+	return &extimage.BGRA{
+		Pix: dst,
+		Stride: f.Width * 4,
+		Rect: image.Rect(0, 0, f.Width, f.Height),
+	}
+}
+
+type Triangle struct {
+	ctx gl.Context
+	fbo *Framebuffer
+	program gl.Program
+	attrib gl.Attrib
+	color gl.Uniform
+	vBuf gl.Buffer
+	size int
+
+	hsv hsv.HSVColor
+
+	iw *ImageWidget
+}
+
+func NewGLTriangle(glctx gl.Context, size int) *Triangle {
+	var err error
+	tri := &Triangle{ size: size, ctx: glctx, }
+
+	// Create and bind an FBO to render into
+	tri.fbo = NewFramebuffer(glctx, size, size, gl.RGBA)
+
+	glctx.BindFramebuffer(gl.FRAMEBUFFER, tri.fbo.Framebuffer)
+
+	vertexSrc := `
+	#version 100
+	attribute vec4 vPosition;
+	void main()
+	{
+		gl_Position = vPosition;
+	}
+	`
+
+	fragmentSrc := `
+	#version 100
+	precision mediump float;
+	uniform vec4 color;
+	void main()
+	{
+		gl_FragColor = vec4(color.b, color.g, color.r, color.a);
+	}
+	`
+
+	tri.program, err = glutil.CreateProgram(glctx, vertexSrc, fragmentSrc)
+	if err != nil {
+		log.Fatalf("Couldn't build program %v", err)
+	}
+
+	vData := f32.Bytes(binary.LittleEndian,
+		 0.0, -0.5, 0.0,
+		-0.5,  0.5, 0.0,
+		 0.5,  0.5, 0.0,
+	)
+	tri.vBuf = glctx.CreateBuffer()
+	glctx.BindBuffer(gl.ARRAY_BUFFER, tri.vBuf)
+	glctx.BufferData(gl.ARRAY_BUFFER, vData, gl.STATIC_DRAW)
+
+	tri.attrib = glctx.GetAttribLocation(tri.program, "vPosition")
+	tri.color = glctx.GetUniformLocation(tri.program, "color")
+
+	tri.hsv = hsv.HSVColor{
+		0, 255, 255,
+	}
+
+	glctx.BindFramebuffer(gl.FRAMEBUFFER, gl.Framebuffer{})
+
+	tri.iw = NewImageWidget()
+
+	return tri
+}
+
+func (t *Triangle) Draw(into *cairo.Surface, at image.Rectangle) {
+	t.ctx.BindFramebuffer(gl.FRAMEBUFFER, t.fbo.Framebuffer)
+	// Draw something
+	t.ctx.Viewport(0, 0, t.size, t.size)
+	t.ctx.ClearColor(1.0, 0.0, 0.0, 1.0)
+	t.ctx.Clear(gl.COLOR_BUFFER_BIT)
+	t.ctx.UseProgram(t.program)
+	t.ctx.BindBuffer(gl.ARRAY_BUFFER, t.vBuf)
+
+	r, g, b, _ := t.hsv.RGBA()
+	t.ctx.Uniform4f(t.color, float32(r) / 65535.0, float32(g) / 65535.0, float32(b) / 65535.0, 1)
+	t.hsv.H += 1
+
+	t.ctx.EnableVertexAttribArray(t.attrib)
+	t.ctx.VertexAttribPointer(t.attrib, 3, gl.FLOAT, false, 0, 0)
+	t.ctx.DrawArrays(gl.TRIANGLES, 0, 3)
+	t.ctx.Finish()
+
+	im := t.fbo.GetImage(t.ctx)
+	t.iw.SetImage(im)
+	t.iw.Draw(into, at)
+}
+
 func main() {
-	fmt.Println("Mini Mouse UI")
+
+	glctx := hlegl.Initialise()
+	if glctx == nil {
+		panic("Couldn't get GL context")
+	}
+
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		panic(err)
 	}
@@ -42,6 +192,8 @@ func main() {
 	grad.AddColorStopRGB(1.0, 0, 0, 1.0)
 	cairoSurface.SetSource(grad)
 	grad.Destroy()
+	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+	cairoSurface.Fill()
 
 	rover, err := NewRover()
 	if err != nil {
@@ -53,10 +205,7 @@ func main() {
 		panic(err)
 	}
 
-	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-	cairoSurface.Fill()
-
-	tick := time.NewTicker(16 * time.Millisecond)
+	tri := NewGLTriangle(glctx, 500)
 
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
@@ -79,6 +228,10 @@ func main() {
 
 		cairoSurface.Save()
 		plot.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
+		cairoSurface.Restore()
+
+		cairoSurface.Save()
+		tri.Draw(cairoSurface, image.Rect(250, 50, 750, 550))
 		cairoSurface.Restore()
 
 		// Finally draw to the screen
