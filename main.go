@@ -10,7 +10,7 @@ import (
 
 )
 
-var bench bool
+var bench bool = true
 
 func main() {
 	fmt.Println("Mini Mouse UI")
@@ -59,6 +59,7 @@ func main() {
 	tick := time.NewTicker(16 * time.Millisecond)
 
 	running := true
+	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
 		<-tick.C
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -85,8 +86,8 @@ func main() {
 		window.UpdateSurface()
 
 		if bench {
-			fmt.Println(time.Since(now))
-			now = time.Now()
+			fmt.Printf("                              \r")
+			fmt.Printf("%v\r", time.Since(now))
 		}
 	}
 }
