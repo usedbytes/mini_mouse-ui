@@ -64,28 +64,22 @@ func (f *Framebuffer) GetImage(glctx gl.Context) image.Image {
 	}
 }
 
-type Triangle struct {
+type DCTriangle struct {
 	ctx gl.Context
 	fbo *Framebuffer
-	program gl.Program
-	attrib gl.Attrib
+	dc *Drawcall
 	color gl.Uniform
-	vBuf gl.Buffer
-	size int
 
 	hsv hsv.HSVColor
+	size int
 
 	iw *ImageWidget
 }
 
-func NewGLTriangle(glctx gl.Context, size int) *Triangle {
+func NewDCTriangle(glctx gl.Context, size int) *DCTriangle {
 	var err error
-	tri := &Triangle{ size: size, ctx: glctx, }
+	tri := &DCTriangle{ size: size, ctx: glctx, }
 
-	// Create and bind an FBO to render into
-	tri.fbo = NewFramebuffer(glctx, size, size, gl.RGBA)
-
-	glctx.BindFramebuffer(gl.FRAMEBUFFER, tri.fbo.Framebuffer)
 
 	vertexSrc := `
 	#version 100
@@ -102,55 +96,48 @@ func NewGLTriangle(glctx gl.Context, size int) *Triangle {
 	uniform vec4 color;
 	void main()
 	{
-		gl_FragColor = vec4(color.b, color.g, color.r, color.a);
+		gl_FragColor = vec4(color.b, color.g, color.r, 1.0);
 	}
 	`
 
-	tri.program, err = glutil.CreateProgram(glctx, vertexSrc, fragmentSrc)
+	program, err := glutil.CreateProgram(glctx, vertexSrc, fragmentSrc)
 	if err != nil {
 		log.Fatalf("Couldn't build program %v", err)
 	}
+
+	tri.dc = NewDrawcall(glctx, program)
+	tri.dc.SetViewport(image.Rect(0, 0, size, size))
+
+	tri.fbo = NewFramebuffer(glctx, size, size, gl.RGBA)
+
+	tri.dc.SetFBO(tri.fbo.Framebuffer)
 
 	vData := f32.Bytes(binary.LittleEndian,
 		 0.0, -0.5, 0.0,
 		-0.5,  0.5, 0.0,
 		 0.5,  0.5, 0.0,
 	)
-	tri.vBuf = glctx.CreateBuffer()
-	glctx.BindBuffer(gl.ARRAY_BUFFER, tri.vBuf)
-	glctx.BufferData(gl.ARRAY_BUFFER, vData, gl.STATIC_DRAW)
-
-	tri.attrib = glctx.GetAttribLocation(tri.program, "vPosition")
-	tri.color = glctx.GetUniformLocation(tri.program, "color")
+	tri.dc.SetVertexData(vData)
+	tri.dc.SetIndices([]uint16{0, 1, 2})
+	tri.dc.SetAttribute("vPosition", 3, 0, 0)
 
 	tri.hsv = hsv.HSVColor{
 		0, 255, 255,
 	}
-
-	glctx.BindFramebuffer(gl.FRAMEBUFFER, gl.Framebuffer{})
 
 	tri.iw = NewImageWidget()
 
 	return tri
 }
 
-func (t *Triangle) Draw(into *cairo.Surface, at image.Rectangle) {
-	t.ctx.BindFramebuffer(gl.FRAMEBUFFER, t.fbo.Framebuffer)
-	// Draw something
-	t.ctx.Viewport(0, 0, t.size, t.size)
-	t.ctx.ClearColor(1.0, 0.0, 0.0, 1.0)
-	t.ctx.Clear(gl.COLOR_BUFFER_BIT)
-	t.ctx.UseProgram(t.program)
-	t.ctx.BindBuffer(gl.ARRAY_BUFFER, t.vBuf)
+func (t *DCTriangle) Draw(into *cairo.Surface, at image.Rectangle) {
 
 	r, g, b, _ := t.hsv.RGBA()
-	t.ctx.Uniform4f(t.color, float32(r) / 65535.0, float32(g) / 65535.0, float32(b) / 65535.0, 1)
+	t.dc.SetUniformf("color", []float32{float32(r) / 65535.0, float32(g) / 65535.0, float32(b) / 65535.0, 1})
 	t.hsv.H += 1
 
-	t.ctx.EnableVertexAttribArray(t.attrib)
-	t.ctx.VertexAttribPointer(t.attrib, 3, gl.FLOAT, false, 0, 0)
-	t.ctx.DrawArrays(gl.TRIANGLES, 0, 3)
-	t.ctx.Finish()
+	t.dc.Draw()
+	t.dc.ctx.Finish()
 
 	im := t.fbo.GetImage(t.ctx)
 	t.iw.SetImage(im)
@@ -205,7 +192,7 @@ func main() {
 		panic(err)
 	}
 
-	tri := NewGLTriangle(glctx, 500)
+	tri := NewDCTriangle(glctx, 500)
 
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
