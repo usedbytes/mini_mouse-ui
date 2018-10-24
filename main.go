@@ -4,8 +4,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
+	"image/png"
 	"log"
+	"os"
 	"time"
+
 
 	"github.com/ungerik/go-cairo"
 	"github.com/ungerik/go-cairo/extimage"
@@ -25,6 +28,18 @@ type Framebuffer struct {
 	Tex gl.Texture
 	Width, Height int
 	Format gl.Enum
+}
+
+func NewTextureFromImage(glctx gl.Context, img *image.NRGBA) gl.Texture {
+	tex := glctx.CreateTexture()
+	glctx.BindTexture(gl.TEXTURE_2D, tex)
+	glctx.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, img.Bounds().Dx(), img.Bounds().Dy(), gl.RGBA, gl.UNSIGNED_BYTE, img.Pix)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+	return tex
 }
 
 func NewFramebuffer(glctx gl.Context, width, height int, format gl.Enum) *Framebuffer {
@@ -83,20 +98,26 @@ func NewDCTriangle(glctx gl.Context, size int) *DCTriangle {
 
 	vertexSrc := `
 	#version 100
-	attribute vec4 vPosition;
+	attribute vec2 position;
+	attribute vec2 tc;
+	varying mediump vec2 v_TexCoord;
+
 	void main()
 	{
-		gl_Position = vPosition;
+		gl_Position = vec4(position, 0.0, 1.0);
+		v_TexCoord = tc;
 	}
 	`
 
 	fragmentSrc := `
 	#version 100
 	precision mediump float;
-	uniform vec4 color;
+	varying mediump vec2 v_TexCoord;
+	uniform sampler2D tex;
 	void main()
 	{
-		gl_FragColor = vec4(color.b, color.g, color.r, 1.0);
+		mediump vec4 rgb = texture2D(tex, v_TexCoord);
+		gl_FragColor = vec4(rgb.b, rgb.g, rgb.r, 1.0);
 	}
 	`
 
@@ -113,13 +134,29 @@ func NewDCTriangle(glctx gl.Context, size int) *DCTriangle {
 	tri.dc.SetFBO(tri.fbo.Framebuffer)
 
 	vData := f32.Bytes(binary.LittleEndian,
-		 0.0, -0.5, 0.0,
-		-0.5,  0.5, 0.0,
-		 0.5,  0.5, 0.0,
+		 0.0, -0.5, 0.5, 0.0,
+		-0.5,  0.5, 0.0, 1.0,
+		 0.5,  0.5, 1.0, 1.0,
 	)
 	tri.dc.SetVertexData(vData)
 	tri.dc.SetIndices([]uint16{0, 1, 2})
-	tri.dc.SetAttribute("vPosition", 3, 0, 0)
+	tri.dc.SetAttribute("position", 2, 4, 0)
+	tri.dc.SetAttribute("tc", 2, 4, 2)
+
+	infile, err := os.Open("bb.png")
+	if err != nil {
+		panic(err)
+	}
+	defer infile.Close()
+
+	img, err := png.Decode(infile)
+	if err != nil {
+		panic(err)
+	}
+
+	tex := NewTextureFromImage(glctx, img.(*image.NRGBA))
+
+	tri.dc.SetTexture("tex", tex)
 
 	tri.hsv = hsv.HSVColor{
 		0, 255, 255,
