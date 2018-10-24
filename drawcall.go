@@ -81,10 +81,8 @@ func (dc *Drawcall) SetIndices(data []uint16) {
 func (dc *Drawcall) SetTexture(name string, tex gl.Texture) {
 	dc.ctx.UseProgram(dc.Program)
 
-	_, ok := dc.Uniforms[name]
-	if !ok {
-		dc.Uniforms[name] = dc.ctx.GetUniformLocation(dc.Program, name)
-	}
+	_ = dc.lookupUniform(name)
+
 	dc.Textures[name] = tex
 }
 
