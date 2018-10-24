@@ -54,8 +54,8 @@ func (dc *Drawcall) SetAttribute(name string, size, stride, offset int) {
 		a.Attrib = dc.ctx.GetAttribLocation(dc.Program, name)
 	}
 	a.Size = size
-	a.Stride = stride
-	a.Offset = offset
+	a.Stride = stride * 4
+	a.Offset = offset * 4
 	a.Type = gl.FLOAT
 
 	dc.Attributes[name] = a
