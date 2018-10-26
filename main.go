@@ -69,15 +69,19 @@ func NewFramebuffer(glctx gl.Context, width, height int, format gl.Enum) *Frameb
 }
 
 func (f *Framebuffer) GetImage(glctx gl.Context) image.Image {
+	return f.GetSubImage(glctx, image.Rect(0, 0, f.Width, f.Height))
+}
+
+func (f *Framebuffer) GetSubImage(glctx gl.Context, region image.Rectangle) image.Image {
 
 	glctx.BindFramebuffer(gl.FRAMEBUFFER, f.Framebuffer)
-	dst := make([]uint8, int(f.Width * f.Height * 4))
-	glctx.ReadPixels(dst, 0, 0, f.Width, f.Height, gl.RGBA, gl.UNSIGNED_BYTE)
+	dst := make([]uint8, int(region.Dx() * region.Dy() * 4))
+	glctx.ReadPixels(dst, region.Min.X, region.Min.Y, region.Dx(), region.Dy(), gl.RGBA, gl.UNSIGNED_BYTE)
 
 	return &extimage.BGRA{
 		Pix: dst,
-		Stride: f.Width * 4,
-		Rect: image.Rect(0, 0, f.Width, f.Height),
+		Stride: region.Dx() * 4,
+		Rect: image.Rect(0, 0, region.Dx(), region.Dy()),
 	}
 }
 
