@@ -287,7 +287,9 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 
 	rec.dc = NewDrawcall(glctx, program)
 
-	oddRects := generateMipViewports(image.Pt(width / 2, height / 2), 0.25, 0.25)
+	xFactor, yFactor := 2, 1
+
+	oddRects := generateMipViewports(image.Pt(width / xFactor, height / yFactor), 1.0 / float64(xFactor * xFactor), 1.0 / float64(yFactor * yFactor))
 	max := 0
 	for _, r := range oddRects {
 		if r.Max.X > max {
@@ -300,7 +302,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 	max = roundToPower2(max)
 	rec.oddFBO = NewFramebuffer(glctx, max, max, gl.RGBA)
 
-	evenRects := generateMipViewports(image.Pt(width / 4, height / 4), 0.25, 0.25)
+	evenRects := generateMipViewports(image.Pt(width / (xFactor * xFactor), height / (yFactor * yFactor)), 1.0 / float64(xFactor * xFactor), 1.0 / float64(yFactor * yFactor))
 	max = 0
 	for _, r := range evenRects {
 		if r.Max.X > max {
@@ -347,8 +349,8 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 		}
 
 		x1, y1, x2, y2 := rectToUV(rect, srcSize)
-		w /= 2
-		h /= 2
+		w /= xFactor
+		h /= yFactor
 
 		vertices = append(vertices,
 			-1.0,  1.0, x1, y2,
