@@ -34,8 +34,8 @@ func NewTextureFromImage(glctx gl.Context, img *image.NRGBA) gl.Texture {
 	tex := glctx.CreateTexture()
 	glctx.BindTexture(gl.TEXTURE_2D, tex)
 	glctx.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, img.Bounds().Dx(), img.Bounds().Dy(), gl.RGBA, gl.UNSIGNED_BYTE, img.Pix)
-	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	glctx.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
@@ -275,12 +275,14 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 	#version 100
 	precision mediump float;
 	uniform sampler2D tex;
+	uniform mediump float step;
 	varying mediump vec2 v_TexCoord;
 	void main()
 	{
-		vec4 rgb = texture2D(tex, v_TexCoord);
+		vec4 current = texture2D(tex, v_TexCoord);
+		vec4 prev = texture2D(tex, v_TexCoord - vec2(step, 0));
 
-		gl_FragColor = vec4(rgb.b, rgb.g, rgb.r, 1.0);
+		gl_FragColor = vec4(max(current.r, prev.r), min(current.g, prev.g), 0.0, 1.0);
 	}
 	`
 
@@ -304,7 +306,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 		}
 	}
 	max = roundToPower2(max)
-	rec.oddFBO = NewFramebuffer(glctx, max, max, gl.RGBA)
+	rec.oddFBO = NewFramebuffer(glctx, max, max, gl.RG)
 
 	evenRects := generateMipViewports(image.Pt(width / (xFactor * xFactor), height / (yFactor * yFactor)), 1.0 / float64(xFactor * xFactor), 1.0 / float64(yFactor * yFactor))
 	max = 0
@@ -317,7 +319,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 		}
 	}
 	max = roundToPower2(max)
-	rec.evenFBO = NewFramebuffer(glctx, max, max, gl.RGBA)
+	rec.evenFBO = NewFramebuffer(glctx, max, max, gl.RG)
 
 	rec.rects = make([]image.Rectangle, len(oddRects) + len(evenRects))
 	//rec.rects[0] = image.Rect(0, 0, width, height)
@@ -328,9 +330,11 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 		rec.rects[i + 1] = evenRects[i / 2]
 	}
 
+	/*
 	for i, r := range rec.rects {
 		fmt.Println(i, ": ", r)
 	}
+	*/
 
 	w, h := width, height
 	vertices := make([]float32, 0, (len(rec.rects)) * 16)
@@ -364,6 +368,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 		 )
 	}
 
+	/*
 	for i := 0; i < len(rec.rects) - 1; i++ {
 		fmt.Println(vertices[i * 16 + 0: i * 16 + 0 + 4])
 		fmt.Println(vertices[i * 16 + 4: i * 16 + 4 + 4])
@@ -371,6 +376,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 		fmt.Println(vertices[i * 16 + 12: i * 16 + 12 + 4])
 		fmt.Println("---")
 	}
+	*/
 
 	vData := f32.Bytes(binary.LittleEndian, vertices...)
 	rec.dc.SetVertexData(vData)
@@ -378,7 +384,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 	rec.dc.SetAttribute("position", 2, 4, 0)
 	rec.dc.SetAttribute("tc", 2, 4, 2)
 
-	infile, err := os.Open("tex.png")
+	infile, err := os.Open("bb.png")
 	if err != nil {
 		panic(err)
 	}
@@ -396,11 +402,7 @@ func NewRecursor(glctx gl.Context, width, height int) *Recursor {
 	return rec
 }
 
-func (rec *Recursor) Draw(into *cairo.Surface, at image.Rectangle) {
-	w2 := at.Bounds().Dx() / 2
-	left := image.Rect(at.Bounds().Min.X, at.Bounds().Min.Y, at.Bounds().Min.X + w2, at.Bounds().Max.Y)
-	right := image.Rect(at.Bounds().Min.X + w2, at.Bounds().Min.Y, at.Bounds().Max.X, at.Bounds().Max.Y)
-
+func (rec *Recursor) Run() {
 	// Special case:
 	rec.dc.SetAttribute("position", 2, 4, 0)
 	rec.dc.SetAttribute("tc", 2, 4, 2)
@@ -412,6 +414,7 @@ func (rec *Recursor) Draw(into *cairo.Surface, at image.Rectangle) {
 	src := rec.oddFBO
 	dst := rec.evenFBO
 	for i, r := range rec.rects[1:] {
+		rec.dc.SetUniformf("step", []float32{ 1.0 / float32(src.Width) })
 		rec.dc.SetAttribute("position", 2, 4, (i + 1) * 4 * 4)
 		rec.dc.SetAttribute("tc", 2, 4, 2 + (i + 1) * 4 * 4)
 		rec.dc.SetTexture("tex", src.Tex)
@@ -423,7 +426,15 @@ func (rec *Recursor) Draw(into *cairo.Surface, at image.Rectangle) {
 		src = dst
 		dst = tmp
 	}
+}
 
+func (rec *Recursor) Draw(into *cairo.Surface, at image.Rectangle) {
+	w2 := at.Bounds().Dx() / 2
+	left := image.Rect(at.Bounds().Min.X, at.Bounds().Min.Y, at.Bounds().Min.X + w2, at.Bounds().Max.Y)
+	right := image.Rect(at.Bounds().Min.X + w2, at.Bounds().Min.Y, at.Bounds().Max.X, at.Bounds().Max.Y)
+
+
+	rec.Run()
 	rec.dc.ctx.Finish()
 
 	rec.iw.SetImage(rec.oddFBO.GetImage(rec.ctx))
@@ -431,6 +442,132 @@ func (rec *Recursor) Draw(into *cairo.Surface, at image.Rectangle) {
 
 	rec.iw.SetImage(rec.evenFBO.GetImage(rec.ctx))
 	rec.iw.Draw(into, right)
+}
+
+type Thresholder struct {
+	ctx gl.Context
+	width, height int
+	dc *Drawcall
+	rec *Recursor
+
+	Tex gl.Texture
+	fbo *Framebuffer
+
+	srcImage image.Image
+
+	iw *ImageWidget
+}
+
+func NewThresholder(glctx gl.Context, width, height int) *Thresholder {
+	var err error
+	th := &Thresholder{ width: width, height: height, ctx: glctx, }
+
+	th.rec = NewRecursor(glctx, width, height)
+
+	vertexSrc := `
+	#version 100
+	attribute vec2 position;
+	attribute vec2 tc;
+	varying mediump vec2 v_TexCoord;
+
+	void main()
+	{
+		gl_Position = vec4(position, 0.0, 1.0);
+		v_TexCoord = tc;
+	}
+	`
+
+	fragmentSrc := `
+	#version 100
+	precision mediump float;
+	uniform sampler2D tex;
+	uniform sampler2D mmTex;
+	uniform float mmX;
+	varying mediump vec2 v_TexCoord;
+	void main()
+	{
+		vec4 mm = texture2D(mmTex, vec2(mmX, v_TexCoord.y));
+		vec4 rgb = texture2D(tex, v_TexCoord);
+
+		float sf = 1.0 / (mm.r - mm.g);
+
+		float res = (rgb.r - mm.g) * sf;
+
+		res = step(0.5, res);
+
+		gl_FragColor = vec4(res, res, res, 1.0);
+	}
+	`
+
+	program, err := glutil.CreateProgram(glctx, vertexSrc, fragmentSrc)
+	if err != nil {
+		log.Fatalf("Couldn't build program %v", err)
+	}
+
+	th.dc = NewDrawcall(glctx, program)
+	th.dc.SetViewport(image.Rect(0, 0, width, height))
+
+	th.fbo = NewFramebuffer(glctx, width, height, gl.RGBA)
+
+	th.dc.SetFBO(th.fbo.Framebuffer)
+
+	vData := f32.Bytes(binary.LittleEndian,
+		-1.0,  1.0, 0.0, 1.0,
+		-1.0, -1.0, 0.0, 0.0,
+		 1.0,  1.0, 1.0, 1.0,
+		 1.0, -1.0, 1.0, 0.0,
+	)
+	th.dc.SetVertexData(vData)
+	th.dc.SetIndices([]uint16{0, 1, 2, 3})
+	th.dc.SetAttribute("position", 2, 4, 0)
+	th.dc.SetAttribute("tc", 2, 4, 2)
+
+	infile, err := os.Open("bb.png")
+	if err != nil {
+		panic(err)
+	}
+	defer infile.Close()
+
+	th.srcImage, err = png.Decode(infile)
+	if err != nil {
+		panic(err)
+	}
+
+	tex := NewTextureFromImage(glctx, th.srcImage.(*image.NRGBA))
+
+	th.dc.SetTexture("tex", tex)
+	//th.dc.SetUniformf("step", []float32{-1 / 16.0})
+
+	th.iw = NewImageWidget()
+
+	return th
+}
+
+func (th *Thresholder) Draw(into *cairo.Surface, at image.Rectangle) {
+
+	th.rec.Run()
+
+	var src *Framebuffer
+	if len(th.rec.rects) & 1 == 0 {
+		src = th.rec.evenFBO
+	} else {
+		src = th.rec.oddFBO
+	}
+	x := float32(th.rec.rects[len(th.rec.rects) - 1].Min.X)
+	th.dc.SetTexture("mmTex", src.Tex)
+	th.dc.SetUniformf("mmX", []float32{ x / float32(src.Width) })
+
+	th.dc.Draw()
+
+	w2 := at.Bounds().Dx() / 2
+	left := image.Rect(at.Bounds().Min.X, at.Bounds().Min.Y, at.Bounds().Min.X + w2, at.Bounds().Max.Y)
+	right := image.Rect(at.Bounds().Min.X + w2, at.Bounds().Min.Y, at.Bounds().Max.X, at.Bounds().Max.Y)
+
+	th.iw.SetImage(th.srcImage)
+	th.iw.Draw(into, left)
+
+	th.iw.SetImage(th.fbo.GetImage(th.ctx))
+	th.iw.Draw(into, right)
 }
 
 func main() {
@@ -471,6 +608,7 @@ func main() {
 	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 	cairoSurface.Fill()
 
+	/*
 	rover, err := NewRover()
 	if err != nil {
 		panic(err)
@@ -480,10 +618,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	*/
 
 	//tri := NewDCTriangle(glctx, 128, 128)
 
-	rec := NewRecursor(glctx, 128, 128)
+	rec := NewThresholder(glctx, 512, 512)
 
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
@@ -500,6 +639,7 @@ func main() {
 
 		now := time.Now()
 
+		/*
 		cairoSurface.Save()
 		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
 		cairoSurface.Restore()
@@ -507,24 +647,11 @@ func main() {
 		cairoSurface.Save()
 		plot.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
 		cairoSurface.Restore()
+		*/
 
 		cairoSurface.Save()
 		rec.Draw(cairoSurface, image.Rect(50, 50, 1050, 550))
 		cairoSurface.Restore()
-		/*
-		col := hsv.HSVColor{
-			0, 255, 255,
-		}
-		ret := generateMipViewports(image.Pt(256, 256), 0.3, 0.3)
-		for _, rect := range ret {
-			r, g, b, _ := col.RGBA()
-			cairoSurface.SetSourceRGB(float64(r) / 65535.0, float64(g) / 65535.0, float64(b) / 65535.0)
-			cairoSurface.Rectangle(float64(rect.Min.X), float64(rect.Min.Y), float64(rect.Dx()), float64(rect.Dy()))
-			cairoSurface.Fill()
-			col.H += 50
-			fmt.Println(rect.Dx(), " x ", rect.Dy())
-		}
-		*/
 
 		// Finally draw to the screen
 		cairoSurface.Flush()
