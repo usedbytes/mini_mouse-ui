@@ -22,6 +22,9 @@ func NewImageWidget() *ImageWidget {
 func (iw *ImageWidget) Draw(into *cairo.Surface, at image.Rectangle) {
 	w, h := float64(at.Dx()), float64(at.Dy())
 
+	into.Save()
+	defer into.Restore()
+
 	into.Translate(float64(at.Min.X), float64(at.Min.Y))
 
 	into.Rectangle(0, 0, w, h)
