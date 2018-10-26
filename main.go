@@ -69,6 +69,8 @@ func NewFramebuffer(glctx gl.Context, width, height int, format gl.Enum) *Frameb
 }
 
 func (f *Framebuffer) GetImage(glctx gl.Context) image.Image {
+
+	glctx.BindFramebuffer(gl.FRAMEBUFFER, f.Framebuffer)
 	dst := make([]uint8, int(f.Width * f.Height * 4))
 	glctx.ReadPixels(dst, 0, 0, f.Width, f.Height, gl.RGBA, gl.UNSIGNED_BYTE)
 
