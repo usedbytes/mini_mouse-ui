@@ -7,20 +7,12 @@ import (
 
 
 	"github.com/ungerik/go-cairo"
-	"github.com/usedbytes/hlegl"
-	"github.com/usedbytes/mini_mouse/ui/gles"
 	"github.com/veandco/go-sdl2/sdl"
 )
 
 var bench bool = true
 
 func main() {
-
-	glctx := hlegl.Initialise()
-	if glctx == nil {
-		panic("Couldn't get GL context")
-	}
-
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		panic(err)
 	}
@@ -62,9 +54,6 @@ func main() {
 		panic(err)
 	}
 
-	quad := gles.NewTexturedQuad(glctx, 128, 128)
-	iw := NewImageWidget()
-
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
@@ -86,12 +75,6 @@ func main() {
 
 		cairoSurface.Save()
 		plot.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
-		cairoSurface.Restore()
-
-		quad.Draw()
-		iw.SetImage(quad.GetImage())
-		cairoSurface.Save()
-		iw.Draw(cairoSurface, image.Rect(250, 50, 750, 550))
 		cairoSurface.Restore()
 
 		// Finally draw to the screen
