@@ -2,18 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/veandco/go-sdl2/sdl"
-	"github.com/ungerik/go-cairo"
+	"image"
 	"time"
 
-	"image"
 
+	"github.com/ungerik/go-cairo"
+	"github.com/veandco/go-sdl2/sdl"
 )
 
-var bench bool
+var bench bool = true
 
 func main() {
-	fmt.Println("Mini Mouse UI")
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		panic(err)
 	}
@@ -42,6 +41,8 @@ func main() {
 	grad.AddColorStopRGB(1.0, 0, 0, 1.0)
 	cairoSurface.SetSource(grad)
 	grad.Destroy()
+	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
+	cairoSurface.Fill()
 
 	rover, err := NewRover()
 	if err != nil {
@@ -53,12 +54,8 @@ func main() {
 		panic(err)
 	}
 
-	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
-	cairoSurface.Fill()
-
-	tick := time.NewTicker(16 * time.Millisecond)
-
 	running := true
+	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
 		<-tick.C
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -85,8 +82,8 @@ func main() {
 		window.UpdateSurface()
 
 		if bench {
-			fmt.Println(time.Since(now))
-			now = time.Now()
+			fmt.Printf("                              \r")
+			fmt.Printf("%v\r", time.Since(now))
 		}
 	}
 }
