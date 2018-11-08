@@ -171,5 +171,5 @@ func (q *TexturedQuad) Draw() {
 }
 
 func (q *TexturedQuad) GetImage() image.Image {
-	return q.fbo.GetImage(q.ctx)
+	return q.fbo.GetSubImage(q.ctx, q.dc.GetViewport())
 }

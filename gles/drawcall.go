@@ -140,6 +140,10 @@ func (dc *Drawcall) SetViewport(vp image.Rectangle) {
 	dc.Viewport = vp
 }
 
+func (dc *Drawcall) GetViewport() image.Rectangle {
+	return dc.Viewport
+}
+
 func (dc *Drawcall) Draw() {
 	dc.ctx.UseProgram(dc.Program)
 
