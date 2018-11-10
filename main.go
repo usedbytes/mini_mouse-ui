@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"net/rpc"
 	"time"
 
 
@@ -17,6 +18,13 @@ func main() {
 		panic(err)
 	}
 	defer sdl.Quit()
+
+	devname := "tcp:minimouse.local:1234"
+	//devname := "tcp:localhost:1234"
+	c, err := rpc.DialHTTP("tcp", devname[len("tcp:"):])
+	if err != nil {
+		fmt.Println("Couldn't connect to server");
+	}
 
 	windowW := 1150
 	windowH := 600
@@ -49,10 +57,7 @@ func main() {
 		panic(err)
 	}
 
-	plot, err := NewPlot()
-	if err != nil {
-		panic(err)
-	}
+	iw := NewImageWidget()
 
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
@@ -73,8 +78,18 @@ func main() {
 		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
 		cairoSurface.Restore()
 
+		if c != nil {
+			var img image.Gray
+			err = c.Call("Telem.GetFrame", true, &img)
+			if err != nil {
+				fmt.Println("Error reading image:", err)
+			} else if img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
+				iw.SetImage(&img)
+			}
+		}
+
 		cairoSurface.Save()
-		plot.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
+		iw.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
 		cairoSurface.Restore()
 
 		// Finally draw to the screen
