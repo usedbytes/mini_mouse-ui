@@ -28,7 +28,7 @@ func (iw *ImageWidget) Draw(into *cairo.Surface, at image.Rectangle) {
 	into.Translate(float64(at.Min.X), float64(at.Min.Y))
 
 	into.Rectangle(0, 0, w, h)
-	into.SetSourceRGBA(0.0, 0.0, 0.0, 0.0)
+	into.SetSourceRGBA(0.0, 0.0, 1.0, 1.0)
 	into.ClipPreserve()
 	into.Fill()
 
