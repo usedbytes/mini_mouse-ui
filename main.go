@@ -6,14 +6,18 @@ import (
 	"net/rpc"
 	"time"
 
-
 	"github.com/ungerik/go-cairo"
 	"github.com/veandco/go-sdl2/sdl"
 
 	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
 )
 
-var bench bool = true
+var bench bool = false
+
+type Pose struct {
+	X, Y float64
+	Heading float64
+}
 
 func main() {
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
@@ -63,6 +67,7 @@ func main() {
 
 	reconnect := false
 
+	var pose Pose
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
@@ -87,10 +92,6 @@ func main() {
 
 		now := time.Now()
 
-		cairoSurface.Save()
-		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
-		cairoSurface.Restore()
-
 		if c != nil {
 			var img image.Gray
 			err = c.Call("Telem.GetFrame", true, &img)
@@ -102,7 +103,19 @@ func main() {
 				_ = algo.FindLine(&img)
 				iw.SetImage(&img)
 			}
+
+			err = c.Call("Telem.GetPose", true, &pose)
+			if err != nil {
+				fmt.Println("Error reading pose:", err)
+				c = nil
+				reconnect = true
+			}
 		}
+
+		cairoSurface.Save()
+		rover.SetHeading(pose.Heading)
+		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
+		cairoSurface.Restore()
 
 		cairoSurface.Save()
 		iw.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))

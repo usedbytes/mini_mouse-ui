@@ -47,6 +47,12 @@ func (r *Rover) Draw(into *cairo.Surface, at image.Rectangle) {
 	into.SetSourceSurface(r.sprite, -r.w / 2, -r.h / 2)
 	into.Paint()
 	into.Restore()
+
+	into.MoveTo(float64(at.Min.X + 5), float64(at.Min.Y + 5))
+	into.SetSourceRGB(1.0, 0.0, 0.0)
+	into.SelectFontFace("Arial", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+	into.SetFontSize(18)
+	into.ShowText(fmt.Sprintf("%3.2f", r.theta * 180.0 / math.Pi))
 }
 
 func (r *Rover) SetHeading(degrees float64) {
