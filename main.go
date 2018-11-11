@@ -9,6 +9,8 @@ import (
 
 	"github.com/ungerik/go-cairo"
 	"github.com/veandco/go-sdl2/sdl"
+
+	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
 )
 
 var bench bool = true
@@ -97,8 +99,7 @@ func main() {
 				c = nil
 				reconnect = true
 			} else if img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
-				//lp := algo.FindLine(&img)
-				//fmt.Println(lp)
+				_ = algo.FindLine(&img)
 				iw.SetImage(&img)
 			}
 		}
