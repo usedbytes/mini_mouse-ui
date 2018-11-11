@@ -37,6 +37,8 @@ func (iw *ImageWidget) Draw(into *cairo.Surface, at image.Rectangle) {
 		into.Save()
 		into.Scale(scale, scale)
 		into.SetSourceSurface(iw.surface, 0, 0)
+		p := into.GetSource()
+		p.SetFilter(cairo.CAIRO_FILTER_NEAREST)
 		into.Paint()
 		into.Restore()
 	}

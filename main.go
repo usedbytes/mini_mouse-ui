@@ -59,6 +59,8 @@ func main() {
 
 	iw := NewImageWidget()
 
+	reconnect := false
+
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
@@ -69,6 +71,15 @@ func main() {
 				println("Quit")
 				running = false
 				break
+			}
+		}
+
+		if reconnect {
+			c, err = rpc.DialHTTP("tcp", devname[len("tcp:"):])
+			if err != nil {
+				fmt.Println("Couldn't connect to server");
+			} else {
+				reconnect = false
 			}
 		}
 
@@ -83,7 +94,11 @@ func main() {
 			err = c.Call("Telem.GetFrame", true, &img)
 			if err != nil {
 				fmt.Println("Error reading image:", err)
+				c = nil
+				reconnect = true
 			} else if img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
+				//lp := algo.FindLine(&img)
+				//fmt.Println(lp)
 				iw.SetImage(&img)
 			}
 		}
