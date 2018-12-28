@@ -55,6 +55,6 @@ func (r *Rover) Draw(into *cairo.Surface, at image.Rectangle) {
 	into.ShowText(fmt.Sprintf("%3.2f", r.theta * 180.0 / math.Pi))
 }
 
-func (r *Rover) SetHeading(degrees float64) {
-	r.theta = degrees * math.Pi / 180.0
+func (r *Rover) SetHeading(radians float64) {
+	r.theta = radians
 }
