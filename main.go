@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/png"
 	"log"
-	"net/rpc"
 	"os"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/veandco/go-sdl2/sdl"
 
 	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
+	"github.com/usedbytes/mini_mouse/ui/conn"
 )
 
 var bench bool = true
@@ -24,7 +24,6 @@ type Pose struct {
 	X, Y float64
 	Heading float64
 }
-
 
 func saveCapture(img image.Image) error {
 	filename := fmt.Sprintf("captures/capture-%s.png", time.Now().Format("2006-01-02-030405"))
@@ -58,59 +57,6 @@ func init() {
 	flag.StringVar(&addr, "a", defaultAddr, usageAddr)
 }
 
-type Conn struct {
-	addr string
-	conn *rpc.Client
-	reconnect bool
-}
-
-func NewConn(addr string) (*Conn, error) {
-	conn := Conn{
-		addr: addr,
-		reconnect: false,
-	}
-
-	c, err := rpc.Dial("tcp", addr)
-	if err != nil {
-		return &conn, err
-	}
-
-	conn.conn = c
-	conn.reconnect = true
-
-	return &conn, nil
-}
-
-func (c *Conn) Dial() error {
-	conn, err := rpc.Dial("tcp", c.addr)
-	if err != nil {
-		return err
-	}
-
-	c.conn = conn
-	return nil
-}
-
-func (c *Conn) Call(serviceMethod string, args interface{}, reply interface{}) error {
-	if c.conn == nil {
-		if !c.reconnect {
-			return nil
-		} else {
-			err := c.Dial()
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	err := c.conn.Call(serviceMethod, args, reply)
-	if err != nil {
-		c.conn = nil
-	}
-
-	return err
-}
-
 func main() {
 	flag.Parse()
 
@@ -119,7 +65,7 @@ func main() {
 	}
 	defer sdl.Quit()
 
-	c, err := NewConn(addr)
+	c, err := conn.NewConn(addr)
 	if err != nil {
 		fmt.Println("Couldn't connect to server", addr);
 	}
