@@ -39,11 +39,6 @@ func main() {
 	}
 	defer sdl.Quit()
 
-	c, err := conn.NewConn(addr)
-	if err != nil {
-		fmt.Println("Couldn't connect to server", addr);
-	}
-
 	windowW := 1150
 	windowH := 600
 
@@ -69,6 +64,11 @@ func main() {
 	grad.Destroy()
 	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 	cairoSurface.Fill()
+
+	c, err := conn.NewConn(addr)
+	if err != nil {
+		fmt.Println("Couldn't connect to server", addr);
+	}
 
 	rover, err := module.NewRover(c)
 	if err != nil {
