@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"flag"
 	"image"
-	"image/png"
 	"log"
-	"os"
 	"time"
 
 	"github.com/ungerik/go-cairo"
 	"github.com/veandco/go-sdl2/sdl"
 
-	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
 	"github.com/usedbytes/mini_mouse/ui/conn"
-	"github.com/usedbytes/mini_mouse/ui/widget"
+	"github.com/usedbytes/mini_mouse/ui/module"
 )
 
 var bench bool = true
@@ -24,25 +21,6 @@ var addr string
 type Pose struct {
 	X, Y float64
 	Heading float64
-}
-
-func saveCapture(img image.Image) error {
-	filename := fmt.Sprintf("captures/capture-%s.png", time.Now().Format("2006-01-02-030405"))
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	if err := png.Encode(f, img); err != nil {
-		f.Close()
-		return err
-	}
-
-	if err := f.Close(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func init() {
@@ -102,9 +80,8 @@ func main() {
 		panic(err)
 	}
 
-	iw := widget.NewImageWidget()
+	cam := module.NewCamera(c)
 
-	var img image.Image
 	var pose Pose
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
@@ -118,23 +95,15 @@ func main() {
 				break
 			case *sdl.KeyboardEvent:
 				if ev.Keysym.Sym == 's' && ev.State == 0 {
-					log.Println("Screenshot")
-					if img != nil {
-						saveCapture(img)
-					}
+					log.Println("Snapshot")
+					cam.Snapshot()
 				}
 			}
 		}
 
 		now := time.Now()
 
-		err = c.Call("Telem.GetFrame", true, &img)
-		if err != nil {
-			fmt.Println("Error reading image:", err)
-		} else if img != nil {
-			_ = algo.FindLine(img.(*image.Gray))
-			iw.SetImage(img)
-		}
+		cam.Update()
 
 		err = c.Call("Telem.GetPose", true, &pose)
 		if err != nil {
@@ -147,7 +116,7 @@ func main() {
 		cairoSurface.Restore()
 
 		cairoSurface.Save()
-		iw.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
+		cam.Draw(cairoSurface, image.Rect(600, 50, 1100, 550))
 		cairoSurface.Restore()
 
 		// Finally draw to the screen
