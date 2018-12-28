@@ -17,7 +17,7 @@ import (
 	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
 )
 
-var bench bool = false
+var bench bool = true
 var addr string
 
 type Pose struct {
@@ -58,6 +58,59 @@ func init() {
 	flag.StringVar(&addr, "a", defaultAddr, usageAddr)
 }
 
+type Conn struct {
+	addr string
+	conn *rpc.Client
+	reconnect bool
+}
+
+func NewConn(addr string) (*Conn, error) {
+	conn := Conn{
+		addr: addr,
+		reconnect: false,
+	}
+
+	c, err := rpc.Dial("tcp", addr)
+	if err != nil {
+		return &conn, err
+	}
+
+	conn.conn = c
+	conn.reconnect = true
+
+	return &conn, nil
+}
+
+func (c *Conn) Dial() error {
+	conn, err := rpc.Dial("tcp", c.addr)
+	if err != nil {
+		return err
+	}
+
+	c.conn = conn
+	return nil
+}
+
+func (c *Conn) Call(serviceMethod string, args interface{}, reply interface{}) error {
+	if c.conn == nil {
+		if !c.reconnect {
+			return nil
+		} else {
+			err := c.Dial()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err := c.conn.Call(serviceMethod, args, reply)
+	if err != nil {
+		c.conn = nil
+	}
+
+	return err
+}
+
 func main() {
 	flag.Parse()
 
@@ -66,7 +119,7 @@ func main() {
 	}
 	defer sdl.Quit()
 
-	c, err := rpc.DialHTTP("tcp", addr)
+	c, err := NewConn(addr)
 	if err != nil {
 		fmt.Println("Couldn't connect to server", addr);
 	}
@@ -104,8 +157,6 @@ func main() {
 
 	iw := NewImageWidget()
 
-	reconnect := false
-
 	var img image.Image
 	var pose Pose
 	running := true
@@ -128,36 +179,19 @@ func main() {
 			}
 		}
 
-		if reconnect {
-			c, err = rpc.DialHTTP("tcp", addr)
-			if err != nil {
-				fmt.Println("Couldn't connect to server");
-			} else {
-				reconnect = false
-			}
-		}
-
 		now := time.Now()
 
-		if c != nil {
-			err = c.Call("Telem.GetFrame", true, &img)
-			if err != nil {
-				fmt.Println("Error reading image:", err)
-				c = nil
-				reconnect = true
-			} else if img != nil {
-				_ = algo.FindLine(img.(*image.Gray))
-				iw.SetImage(img)
-			}
+		err = c.Call("Telem.GetFrame", true, &img)
+		if err != nil {
+			fmt.Println("Error reading image:", err)
+		} else if img != nil {
+			_ = algo.FindLine(img.(*image.Gray))
+			iw.SetImage(img)
 		}
 
-		if c != nil {
-			err = c.Call("Telem.GetPose", true, &pose)
-			if err != nil {
-				fmt.Println("Error reading pose:", err)
-				c = nil
-				reconnect = true
-			}
+		err = c.Call("Telem.GetPose", true, &pose)
+		if err != nil {
+			fmt.Println("Error reading pose:", err)
 		}
 
 		cairoSurface.Save()
