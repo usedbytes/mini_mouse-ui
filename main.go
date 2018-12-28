@@ -1,9 +1,13 @@
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
 	"image"
+	"image/png"
+	"log"
 	"net/rpc"
+	"os"
 	"time"
 
 	"github.com/ungerik/go-cairo"
@@ -19,13 +23,38 @@ type Pose struct {
 	Heading float64
 }
 
+
+func saveCapture(img image.Image) error {
+	filename := fmt.Sprintf("captures/capture-%s.png", time.Now().Format("2006-01-02-030405"))
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		return err
+	}
+
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func init() {
+	gob.Register(&image.NRGBA{})
+	gob.Register(&image.Gray{})
+}
+
 func main() {
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		panic(err)
 	}
 	defer sdl.Quit()
 
-	devname := "tcp:minimouse.local:1234"
+	devname := "tcp:minimouse:1234"
 	//devname := "tcp:localhost:1234"
 	c, err := rpc.DialHTTP("tcp", devname[len("tcp:"):])
 	if err != nil {
@@ -67,17 +96,25 @@ func main() {
 
 	reconnect := false
 
+	var img image.Image
 	var pose Pose
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
 		<-tick.C
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
+			switch ev := event.(type) {
 			case *sdl.QuitEvent:
 				println("Quit")
 				running = false
 				break
+			case *sdl.KeyboardEvent:
+				if ev.Keysym.Sym == 's' && ev.State == 0 {
+					log.Println("Screenshot")
+					if img != nil {
+						saveCapture(img)
+					}
+				}
 			}
 		}
 
@@ -93,17 +130,18 @@ func main() {
 		now := time.Now()
 
 		if c != nil {
-			var img image.Gray
 			err = c.Call("Telem.GetFrame", true, &img)
 			if err != nil {
 				fmt.Println("Error reading image:", err)
 				c = nil
 				reconnect = true
-			} else if img.Rect.Dx() > 0 && img.Rect.Dy() > 0 {
-				_ = algo.FindLine(&img)
-				iw.SetImage(&img)
+			} else if img != nil {
+				_ = algo.FindLine(img.(*image.Gray))
+				iw.SetImage(img)
 			}
+		}
 
+		if c != nil {
 			err = c.Call("Telem.GetPose", true, &pose)
 			if err != nil {
 				fmt.Println("Error reading pose:", err)
