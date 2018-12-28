@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/gob"
 	"fmt"
+	"flag"
 	"image"
 	"image/png"
 	"log"
@@ -17,6 +18,7 @@ import (
 )
 
 var bench bool = false
+var addr string
 
 type Pose struct {
 	X, Y float64
@@ -46,19 +48,27 @@ func saveCapture(img image.Image) error {
 func init() {
 	gob.Register(&image.NRGBA{})
 	gob.Register(&image.Gray{})
+
+	const (
+		defaultAddr = "minimouse.local:1234"
+		usageAddr   = "Remote address"
+
+	)
+
+	flag.StringVar(&addr, "a", defaultAddr, usageAddr)
 }
 
 func main() {
+	flag.Parse()
+
 	if err := sdl.Init(sdl.INIT_EVERYTHING); err != nil {
 		panic(err)
 	}
 	defer sdl.Quit()
 
-	devname := "tcp:minimouse:1234"
-	//devname := "tcp:localhost:1234"
-	c, err := rpc.DialHTTP("tcp", devname[len("tcp:"):])
+	c, err := rpc.DialHTTP("tcp", addr)
 	if err != nil {
-		fmt.Println("Couldn't connect to server");
+		fmt.Println("Couldn't connect to server", addr);
 	}
 
 	windowW := 1150
@@ -119,7 +129,7 @@ func main() {
 		}
 
 		if reconnect {
-			c, err = rpc.DialHTTP("tcp", devname[len("tcp:"):])
+			c, err = rpc.DialHTTP("tcp", addr)
 			if err != nil {
 				fmt.Println("Couldn't connect to server");
 			} else {
