@@ -1,4 +1,4 @@
-package main
+package module
 
 import (
 	"fmt"
@@ -6,15 +6,18 @@ import (
 	"math"
 
 	"github.com/ungerik/go-cairo"
+
+	"github.com/usedbytes/mini_mouse/ui/conn"
 )
 
 type Rover struct {
+	conn *conn.Conn
 	sprite *cairo.Surface
 	w, h float64
 	theta float64
 }
 
-func NewRover() (*Rover, error) {
+func NewRover(conn *conn.Conn) (*Rover, error) {
 	r := Rover{}
 
 	sprite, status := cairo.NewSurfaceFromPNG("outline.png")
@@ -24,6 +27,8 @@ func NewRover() (*Rover, error) {
 	r.sprite = sprite
 
 	r.w, r.h = float64(r.sprite.GetWidth()), float64(r.sprite.GetHeight())
+
+	r.conn = conn
 
 	return &r, nil
 }
@@ -53,6 +58,21 @@ func (r *Rover) Draw(into *cairo.Surface, at image.Rectangle) {
 	into.SelectFontFace("Arial", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
 	into.SetFontSize(18)
 	into.ShowText(fmt.Sprintf("%3.2f", r.theta * 180.0 / math.Pi))
+}
+
+type Pose struct {
+	X, Y float64
+	Heading float64
+}
+
+func (r *Rover) Update() {
+	var pose Pose
+	err := r.conn.Call("Telem.GetPose", true, &pose)
+	if err != nil {
+		fmt.Println("Error reading pose:", err)
+	}
+
+	r.SetHeading(pose.Heading)
 }
 
 func (r *Rover) SetHeading(radians float64) {

@@ -18,11 +18,6 @@ import (
 var bench bool = true
 var addr string
 
-type Pose struct {
-	X, Y float64
-	Heading float64
-}
-
 func init() {
 	gob.Register(&image.NRGBA{})
 	gob.Register(&image.Gray{})
@@ -75,14 +70,13 @@ func main() {
 	cairoSurface.Rectangle(0, 0, float64(windowW), float64(windowH))
 	cairoSurface.Fill()
 
-	rover, err := NewRover()
+	rover, err := module.NewRover(c)
 	if err != nil {
 		panic(err)
 	}
 
 	cam := module.NewCamera(c)
 
-	var pose Pose
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
@@ -104,14 +98,9 @@ func main() {
 		now := time.Now()
 
 		cam.Update()
-
-		err = c.Call("Telem.GetPose", true, &pose)
-		if err != nil {
-			fmt.Println("Error reading pose:", err)
-		}
+		rover.Update()
 
 		cairoSurface.Save()
-		rover.SetHeading(pose.Heading)
 		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
 		cairoSurface.Restore()
 
