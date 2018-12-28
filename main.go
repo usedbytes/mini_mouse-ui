@@ -15,7 +15,7 @@ import (
 	"github.com/usedbytes/mini_mouse/ui/module"
 )
 
-var bench bool = true
+var bench bool
 var addr string
 
 func init() {
@@ -26,9 +26,13 @@ func init() {
 		defaultAddr = "minimouse.local:1234"
 		usageAddr   = "Remote address"
 
+		defaultBench = false
+		usageBench   = "Measure drawing time"
+
 	)
 
 	flag.StringVar(&addr, "a", defaultAddr, usageAddr)
+	flag.BoolVar(&bench, "b", defaultBench, usageBench)
 }
 
 func main() {
