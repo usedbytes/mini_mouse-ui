@@ -7,5 +7,5 @@ import (
 )
 
 type Drawer interface {
-	Draw(into *cairo.Surface, at image.Rect)
+	Draw(into *cairo.Surface, at image.Rectangle)
 }

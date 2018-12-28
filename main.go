@@ -15,6 +15,7 @@ import (
 
 	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
 	"github.com/usedbytes/mini_mouse/ui/conn"
+	"github.com/usedbytes/mini_mouse/ui/widget"
 )
 
 var bench bool = true
@@ -101,7 +102,7 @@ func main() {
 		panic(err)
 	}
 
-	iw := NewImageWidget()
+	iw := widget.NewImageWidget()
 
 	var img image.Image
 	var pose Pose
