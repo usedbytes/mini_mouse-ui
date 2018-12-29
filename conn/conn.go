@@ -16,19 +16,17 @@ func NewConn(addr string) (*Conn, error) {
 		reconnect: false,
 	}
 
-	c, err := rpc.Dial("tcp", addr)
+	err := conn.Dial()
 	if err != nil {
 		return &conn, err
 	}
-
-	conn.conn = c
 	conn.reconnect = true
 
 	return &conn, nil
 }
 
 func (c *Conn) Dial() error {
-	conn, err := rpc.Dial("tcp", c.addr)
+	conn, err := rpc.DialHTTP("tcp", c.addr)
 	if err != nil {
 		return err
 	}
