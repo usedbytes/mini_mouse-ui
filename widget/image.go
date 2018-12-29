@@ -2,7 +2,6 @@ package widget
 
 import (
 	"image"
-	"math"
 
 	"github.com/ungerik/go-cairo"
 )
@@ -33,9 +32,10 @@ func (iw *ImageWidget) Draw(into *cairo.Surface, at image.Rectangle) {
 	into.Fill()
 
 	if iw.surface != nil {
-		scale := math.Min(w / iw.w, h / iw.h)
+		scaleX := w / iw.w
+		scaleY := h / iw.h
 		into.Save()
-		into.Scale(scale, scale)
+		into.Scale(scaleX, scaleY)
 		into.SetSourceSurface(iw.surface, 0, 0)
 		p := into.GetSource()
 		p.SetFilter(cairo.CAIRO_FILTER_NEAREST)
