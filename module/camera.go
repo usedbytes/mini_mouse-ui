@@ -9,9 +9,10 @@ import (
 
 	"github.com/ungerik/go-cairo"
 
-	"github.com/usedbytes/mini_mouse/bot/plan/line/algo"
+	_ "github.com/usedbytes/mini_mouse/bot/plan/line/algo"
 	"github.com/usedbytes/mini_mouse/ui/conn"
 	"github.com/usedbytes/mini_mouse/ui/widget"
+	"github.com/usedbytes/mini_mouse/cv"
 )
 
 type Camera struct {
@@ -54,8 +55,16 @@ func (c *Camera) Update() {
 	if err != nil {
 		fmt.Println("Error reading image:", err)
 	} else if c.img != nil {
-		_ = algo.FindLine(c.img.(*image.Gray))
-		c.iw.SetImage(c.img)
+		//_ = algo.FindLine(c.img.(*image.Gray))
+		switch v := c.img.(type) {
+		/*
+		case *image.YCbCr:
+			c.iw.SetImage(cv.NewRawYCbCr(v))
+		*/
+		default:
+			_ = v
+			c.iw.SetImage(c.img)
+		}
 	}
 }
 
@@ -65,7 +74,12 @@ func (c *Camera) Draw(into *cairo.Surface, at image.Rectangle) {
 
 func (c *Camera) Snapshot() error {
 	if c.img != nil {
-		return saveCapture(c.img)
+		switch v := c.img.(type) {
+		case *image.YCbCr:
+			return saveCapture(cv.NewRawYCbCr(v))
+		default:
+			return saveCapture(c.img)
+		}
 	}
 
 	return nil

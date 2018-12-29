@@ -21,6 +21,7 @@ var addr string
 func init() {
 	gob.Register(&image.NRGBA{})
 	gob.Register(&image.Gray{})
+	gob.Register(&image.YCbCr{})
 
 	const (
 		defaultAddr = "minimouse.local:1234"
