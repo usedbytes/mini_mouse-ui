@@ -82,6 +82,8 @@ func main() {
 
 	cam := module.NewCamera(c)
 
+	var abcd []time.Time
+
 	running := true
 	tick := time.NewTicker(16 * time.Millisecond)
 	for running {
@@ -104,6 +106,12 @@ func main() {
 
 		cam.Update()
 		rover.Update()
+
+		err := c.Call("Telem.GetTimings", true, &abcd)
+		if err != nil {
+			fmt.Println("Error reading times:", err)
+		}
+		fmt.Println("Total:", abcd[3].Sub(abcd[0]))
 
 		cairoSurface.Save()
 		rover.Draw(cairoSurface, image.Rect(50, 50, 550, 550))
